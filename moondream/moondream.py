@@ -1,5 +1,4 @@
 import torch
-from torch import nn
 from .vision_encoder import VisionEncoder
 from .configuration_moondream import MoondreamConfig
 from transformers import PreTrainedModel
@@ -9,38 +8,23 @@ from .modeling_phi import PhiForCausalLM
 from .configuration_moondream import PhiConfig
 
 
-class TextModel(nn.Module):
-    """
-    Wrapper that holds PhiForCausalLM under `self.model` so the parameter
-    paths line up with the published moondream1 safetensors checkpoint
-    (text_model.model.transformer.*, text_model.model.lm_head.*). Without
-    this wrapper, all checkpoint keys mismatch silently and weights stay
-    at random init, producing the "!!!!" generation symptom.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        if type(config.phi_config) == dict:
-            phi_config = PhiConfig(**config.phi_config)
-        else:
-            phi_config = config.phi_config
-
-        self.model = PhiForCausalLM(phi_config)
-
-
 class Moondream(PreTrainedModel):
     config_class = MoondreamConfig
 
     def __init__(self, config):
         super().__init__(config)
         self.vision_encoder = VisionEncoder()
-        self.text_model = TextModel(config)
+
+        if type(config.phi_config) == dict:
+            phi_config = PhiConfig(**config.phi_config)
+        else:
+            phi_config = config.phi_config
+        self.text_model = PhiForCausalLM(phi_config)
         self.post_init()
 
     @property
     def device(self):
-        return self.text_model.model.device
+        return self.text_model.device
 
     def encode_image(self, image):
         return self.vision_encoder(image)
@@ -51,7 +35,7 @@ class Moondream(PreTrainedModel):
                 txt, return_tensors="pt", add_special_tokens=False
             ).input_ids.to(self.device)
 
-        text_emb = self.text_model.model.get_input_embeddings()
+        text_emb = self.text_model.get_input_embeddings()
 
         # Add BOS token
         embeds = []
@@ -91,7 +75,7 @@ class Moondream(PreTrainedModel):
 
         with torch.no_grad():
             inputs_embeds = self.input_embeds(prompt, image_embeds, tokenizer)
-            output_ids = self.text_model.model.generate(
+            output_ids = self.text_model.generate(
                 inputs_embeds=inputs_embeds, **generate_config
             )
 
