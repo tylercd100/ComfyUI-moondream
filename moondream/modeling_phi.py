@@ -1030,7 +1030,13 @@ class CausalLMHead(nn.Module):
 
 
 class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.linear.weight"]
+    # NOTE: Phi sets tie_word_embeddings=False — lm_head and wte are stored as
+    # separate weights in the checkpoint and are not tied. Listing
+    # `lm_head.linear.weight` in _tied_weights_keys (a Llama-copy artifact)
+    # makes newer transformers (>=4.50) skip loading it from the checkpoint,
+    # expecting tie_weights() to populate it later. With tie_word_embeddings
+    # False, that tying never runs and lm_head stays random — which makes
+    # generation emit a single token forever (the "!!!!" symptom).
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi,bias=False->bias=True
     def __init__(self, config):
