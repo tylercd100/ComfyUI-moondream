@@ -1223,6 +1223,29 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         else:
             model_inputs = {"input_ids": input_ids}
 
+        # When generation was started with inputs_embeds (longer than the
+        # subsequent input_ids), newer transformers fail to grow attention_mask
+        # in lock-step with the cache. Force it to cache_length + new tokens so
+        # _prepare_4d_causal_attention_mask produces a mask of the right size.
+        if (
+            past_key_values is not None
+            and isinstance(past_key_values, Cache)
+            and attention_mask is not None
+        ):
+            expected_len = past_key_values.get_seq_length() + input_ids.shape[1]
+            if attention_mask.shape[1] != expected_len:
+                if attention_mask.shape[1] < expected_len:
+                    pad = expected_len - attention_mask.shape[1]
+                    attention_mask = torch.cat(
+                        [
+                            attention_mask,
+                            attention_mask.new_ones((attention_mask.shape[0], pad)),
+                        ],
+                        dim=-1,
+                    )
+                else:
+                    attention_mask = attention_mask[:, -expected_len:]
+
         model_inputs.update(
             {
                 "position_ids": position_ids,
