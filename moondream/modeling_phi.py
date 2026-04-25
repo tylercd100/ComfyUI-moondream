@@ -825,7 +825,7 @@ class PhiModel(PhiPreTrainedModel):
 
     def __init__(self, config: PhiConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = getattr(config, "pad_token_id", None)
         self.vocab_size = config.vocab_size
 
         self.embd = Embedding(config)
