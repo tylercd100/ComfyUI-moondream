@@ -909,10 +909,12 @@ class PhiModel(PhiPreTrainedModel):
                 )
                 use_cache = False
 
+        use_legacy_cache = False
         if use_cache:
             if not isinstance(past_key_values, Cache):
                 if past_key_values is not None and hasattr(DynamicCache, "from_legacy_cache"):
                     past_key_values = DynamicCache.from_legacy_cache(past_key_values)
+                    use_legacy_cache = True
                 else:
                     past_key_values = DynamicCache()
             if hasattr(past_key_values, "get_usable_length"):
