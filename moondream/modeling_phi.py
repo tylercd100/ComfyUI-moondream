@@ -108,13 +108,26 @@ class PhiRotaryEmbedding(nn.Module):
 
     def forward(self, x, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
-        if seq_len > self.max_seq_len_cached:
-            self._set_cos_sin_cache(seq_len=seq_len, device=x.device, dtype=x.dtype)
-
-        return (
-            self.cos_cached[:seq_len].to(dtype=x.dtype),
-            self.sin_cached[:seq_len].to(dtype=x.dtype),
+        # Compute cos/sin from scratch each call. The cached buffers
+        # (`inv_freq`, `cos_cached`, `sin_cached`) are non-persistent and end
+        # up filled with uninitialized memory when `from_pretrained` builds
+        # the model under `init_empty_weights()` (meta device) — the cached
+        # values become garbage of magnitude ~1e4, which propagates as NaN
+        # through sin and the rest of attention. Recomputing in forward is a
+        # few extra ops but avoids the meta-init landmine entirely.
+        device = x.device
+        compute_dtype = torch.float32
+        inv_freq = 1.0 / (
+            self.base
+            ** (
+                torch.arange(0, self.dim, 2, device=device, dtype=compute_dtype)
+                / self.dim
+            )
         )
+        t = torch.arange(seq_len, device=device, dtype=compute_dtype)
+        freqs = torch.outer(t, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Phi
@@ -144,6 +157,21 @@ class PhiLinearScalingRotaryEmbedding(PhiRotaryEmbedding):
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+    def forward(self, x, seq_len=None):
+        device = x.device
+        compute_dtype = torch.float32
+        inv_freq = 1.0 / (
+            self.base
+            ** (
+                torch.arange(0, self.dim, 2, device=device, dtype=compute_dtype)
+                / self.dim
+            )
+        )
+        t = torch.arange(seq_len, device=device, dtype=compute_dtype) / self.scaling_factor
+        freqs = torch.outer(t, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Phi
@@ -183,6 +211,28 @@ class PhiDynamicNTKScalingRotaryEmbedding(PhiRotaryEmbedding):
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
+
+    def forward(self, x, seq_len=None):
+        device = x.device
+        compute_dtype = torch.float32
+        if seq_len > self.max_position_embeddings:
+            base = self.base * (
+                (self.scaling_factor * seq_len / self.max_position_embeddings)
+                - (self.scaling_factor - 1)
+            ) ** (self.dim / (self.dim - 2))
+        else:
+            base = self.base
+        inv_freq = 1.0 / (
+            base
+            ** (
+                torch.arange(0, self.dim, 2, device=device, dtype=compute_dtype)
+                / self.dim
+            )
+        )
+        t = torch.arange(seq_len, device=device, dtype=compute_dtype)
+        freqs = torch.outer(t, inv_freq)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        return emb.cos().to(dtype=x.dtype), emb.sin().to(dtype=x.dtype)
 
 
 # Copied from transformers.models.llama.modeling_llama.rotate_half
