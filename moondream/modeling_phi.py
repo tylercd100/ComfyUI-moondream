@@ -1048,7 +1048,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_input_embeddings
     def set_input_embeddings(self, value):
-        self.model.embd.wte = value
+        self.transformer.embd.wte = value
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_output_embeddings
     def get_output_embeddings(self):
@@ -1060,11 +1060,11 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.set_decoder
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.transformer = decoder
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.get_decoder
     def get_decoder(self):
-        return self.model
+        return self.transformer
 
     def forward(
         self,
@@ -1173,8 +1173,15 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         if past_key_values is not None:
             if isinstance(past_key_values, Cache):
                 cache_length = past_key_values.get_seq_length()
-                past_length = past_key_values.seen_tokens
-                max_cache_length = past_key_values.get_max_length()
+                # Newer transformers removed `seen_tokens` as a public attr; the
+                # current sequence length is what we need either way.
+                past_length = getattr(past_key_values, "seen_tokens", cache_length)
+                if hasattr(past_key_values, "get_max_length"):
+                    max_cache_length = past_key_values.get_max_length()
+                elif hasattr(past_key_values, "get_max_cache_shape"):
+                    max_cache_length = past_key_values.get_max_cache_shape()
+                else:
+                    max_cache_length = None
             else:
                 cache_length = past_length = past_key_values[0][0].shape[2]
                 max_cache_length = None
@@ -1229,6 +1236,10 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
     @staticmethod
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
+        # Newer transformers Cache objects expose their own reorder_cache method.
+        if isinstance(past_key_values, Cache):
+            past_key_values.reorder_cache(beam_idx)
+            return past_key_values
         reordered_past = ()
         for layer_past in past_key_values:
             reordered_past += (
