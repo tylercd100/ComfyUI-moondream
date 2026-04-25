@@ -27,7 +27,6 @@ class TextModel(nn.Module):
             phi_config = config.phi_config
 
         self.model = PhiForCausalLM(phi_config)
-        self.text_emb = self.model.get_input_embeddings()
 
 
 class Moondream(PreTrainedModel):
