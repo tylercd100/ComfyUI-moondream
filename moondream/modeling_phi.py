@@ -808,7 +808,7 @@ class Embedding(nn.Module):
     def __init__(self, config: PhiConfig):
         super().__init__()
         self.wte = nn.Embedding(
-            config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id
+            config.vocab_size, config.hidden_size, padding_idx=getattr(config, "pad_token_id", None)
         )
 
     def forward(self, input_ids: torch.LongTensor) -> torch.FloatTensor:
