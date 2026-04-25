@@ -3,3 +3,10 @@ huggingface-hub>=0.20.1
 Pillow>=10.1.0
 timm==0.9.12
 einops
+# Pin transformers to a known-working range. The moondream1 config was saved
+# with 4.36.2; behavior changes in 4.42+ break this implementation
+# (see https://github.com/huggingface/transformers/issues/31782 and
+# https://github.com/huggingface/transformers/issues/42832). The
+# transformers-modern-compat branch contains an in-progress port to
+# transformers >=4.50 if you need to revisit later.
+transformers>=4.36,<4.42
