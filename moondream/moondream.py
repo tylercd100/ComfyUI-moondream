@@ -10,6 +10,12 @@ from .configuration_moondream import PhiConfig
 
 class Moondream(PreTrainedModel):
     config_class = MoondreamConfig
+    # Newer transformers (>=4.50) reads `self.all_tied_weights_keys` from
+    # several from_pretrained code paths. Phi doesn't tie any weights, and the
+    # outer Moondream class adds none either, so an empty dict is correct.
+    # Defining it as a plain class attribute (no setter) is also important: if
+    # this were a property, post_init()'s implicit assignment would crash.
+    all_tied_weights_keys = {}
 
     def __init__(self, config):
         super().__init__(config)
@@ -20,7 +26,14 @@ class Moondream(PreTrainedModel):
         else:
             phi_config = config.phi_config
         self.text_model = PhiForCausalLM(phi_config)
-        self.post_init()
+        # NOTE: do NOT call self.post_init() here. Under transformers >=4.50's
+        # meta-device init pipeline, calling post_init() at the outer level
+        # re-runs _init_weights AFTER the checkpoint has been loaded, which
+        # silently overwrites every Linear/Embedding weight with N(0, 0.02)
+        # noise (LayerNorms survive because _init_weights skips them). The
+        # inner PhiForCausalLM still calls its own post_init() in __init__,
+        # which is enough — that runs BEFORE load and gets overwritten by
+        # the checkpoint values, as intended.
 
     @property
     def device(self):
