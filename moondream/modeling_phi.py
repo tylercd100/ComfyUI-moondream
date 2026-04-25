@@ -372,7 +372,10 @@ class PhiAttention(nn.Module):
                     "for auto-regressive decoding with k/v caching, please make sure to initialize the attention class "
                     "with a layer index."
                 )
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         # Partial rotary embedding
@@ -506,7 +509,10 @@ class PhiFlashAttention2(PhiAttention):
 
         kv_seq_len = key_states.shape[-2]
         if past_key_value is not None:
-            kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            if hasattr(past_key_value, "get_usable_length"):
+                kv_seq_len += past_key_value.get_usable_length(kv_seq_len, self.layer_idx)
+            else:
+                kv_seq_len += past_key_value.get_seq_length(self.layer_idx)
         cos, sin = self.rotary_emb(value_states, seq_len=kv_seq_len)
 
         # Partial rotary embedding
@@ -909,7 +915,10 @@ class PhiModel(PhiPreTrainedModel):
                     past_key_values = DynamicCache.from_legacy_cache(past_key_values)
                 else:
                     past_key_values = DynamicCache()
-            past_key_values_length = past_key_values.get_usable_length(seq_length)
+            if hasattr(past_key_values, "get_usable_length"):
+                past_key_values_length = past_key_values.get_usable_length(seq_length)
+            else:
+                past_key_values_length = past_key_values.get_seq_length()
 
         if position_ids is None:
             device = input_ids.device if input_ids is not None else inputs_embeds.device
