@@ -34,6 +34,10 @@ from transformers.modeling_outputs import (
     SequenceClassifierOutputWithPast,
 )
 from transformers.modeling_utils import PreTrainedModel
+try:
+    from transformers.generation import GenerationMixin
+except ImportError:  # transformers <4.27
+    from transformers.generation_utils import GenerationMixin
 from transformers.utils import (
     is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
@@ -1012,7 +1016,7 @@ class CausalLMHead(nn.Module):
         return self.linear(self.ln(hidden_states))
 
 
-class PhiForCausalLM(PhiPreTrainedModel):
+class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.linear.weight"]
 
     # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi,bias=False->bias=True
