@@ -24,6 +24,13 @@ class Moondream(PreTrainedModel):
     def device(self):
         return self.text_model.device
 
+    def mark_tied_weights_as_initialized(self):
+        # Newer transformers (>=4.50ish) call this on the outer model and expect
+        # `self.all_tied_weights_keys` to exist. The inner PhiForCausalLM already
+        # declares its own `_tied_weights_keys`, and weights are loaded from the
+        # checkpoint directly, so there is nothing to mark here.
+        pass
+
     def encode_image(self, image):
         return self.vision_encoder(image)
 
