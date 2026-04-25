@@ -20,23 +20,12 @@ class Moondream(PreTrainedModel):
             phi_config = config.phi_config
         self.text_model = PhiForCausalLM(phi_config)
         # Run the standard transformers init/tie hooks on the outer model so
-        # tie_weights() runs and `all_tied_weights_keys` gets populated. Without
-        # this, lm_head.linear.weight (tied to wte.weight) is treated as a
-        # missing weight by from_pretrained and stays randomly initialized,
-        # which makes generation emit a single token forever.
+        # tie_weights() runs and `all_tied_weights_keys` gets populated by
+        # post_init itself. Without this, lm_head.linear.weight (tied to
+        # wte.weight) is treated as a missing weight by from_pretrained and
+        # stays randomly initialized, which makes generation emit a single
+        # token forever.
         self.post_init()
-
-    @property
-    def all_tied_weights_keys(self):
-        # Re-export the inner model's tied-weight map with the `text_model.`
-        # prefix so transformers' from_pretrained sees the full parameter
-        # names. If the inner model hasn't populated it yet (older
-        # transformers), construct it from `_tied_weights_keys`.
-        inner = getattr(self.text_model, "all_tied_weights_keys", None)
-        if isinstance(inner, dict) and inner:
-            return {f"text_model.{k}": v for k, v in inner.items()}
-        keys = getattr(self.text_model, "_tied_weights_keys", []) or []
-        return {f"text_model.{k}": None for k in keys}
 
     @property
     def device(self):
